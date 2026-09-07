@@ -1,58 +1,60 @@
-# Task format and validation CLI
+# Task format and CLI
 
-A task is one UTF-8 YAML mapping. Schema version `1.0` is the default; specifying another version fails validation. Unknown fields are rejected.
+A task is one UTF-8 YAML mapping. Schema version `1.0` defaults if omitted; unknown fields and unsupported versions are rejected.
 
-This is a **configuration illustration**, not an executable sample engineering task. To validate it, save it as `task.yaml` beside an existing `repository/` directory. The command is checked structurally but never executed by `validate`.
+This is a configuration illustration, not a sample engineering task. Save it beside an existing `repository/` directory to validate it. Replace the verifier path with your operator-controlled script before executing `verify`.
 
 ```yaml
 schema_version: '1.0'
 id: local-contract
 title: Local task contract
-description: Declare the workspace and verification entry point for a local task.
+description: Declare a local workspace and a trusted verification entry point.
 workspace: repository
 timeout_seconds: 30
-verification_command: [python, -m, pytest]
+verification_command: [python, /absolute/path/to/trusted_verifier.py]
 allowed_paths:
   - src
   - tests
 metadata:
   category: local
+environment:
+  TASK_MODE: strict
 ```
-
-```sh
-uv run --locked long-swe validate task.yaml
-```
-
-No evaluation scores or test counts are produced. Validation only returns `valid`, `task_id`, `schema_version`, and the resolved `workspace`. Repeating validation against the same unchanged filesystem produces the same output.
 
 ## Field contract
 
 | Field | Rule |
 | --- | --- |
-| `schema_version` | String `1.0`; optional, defaults to `1.0` |
-| `id` | Lowercase slug beginning with a letter; single hyphens separate segments |
-| `title`, `description` | Nonblank strings |
-| `workspace` | Existing directory relative to the manifest, or `.` for that directory |
-| `timeout_seconds` | Required finite number greater than zero; enforcement is deferred |
-| `verification_command` | Nonempty argument array; first argument is a nonblank executable; no NULs |
-| `allowed_paths` | Nonempty array of explicit workspace-relative files or directory roots |
-| `metadata` | Optional JSON-compatible object with finite numeric values |
+| schema_version | String 1.0, optional |
+| id | Lowercase slug beginning with a letter, single hyphen separators |
+| title, description | Nonblank strings |
+| workspace | Existing manifest-relative directory, or `.` |
+| timeout_seconds | Finite number greater than zero, enforced during execution |
+| verification_command | Nonempty argument array, nonblank executable, no NULs |
+| allowed_paths | Nonempty explicit workspace-relative file/directory roots |
+| metadata | Optional JSON-compatible object, finite numbers |
+| environment | Optional validated uppercase TASK_ string parameters |
 
-Paths use `/` separators on every supported host. Absolute paths, traversal segments, empty segments, device names, Windows-reserved characters, and trailing dots/spaces are rejected. Writable roots cannot be `.`, contain `.git`, or duplicate another root ignoring case. Overlapping parent/child roots are allowed; each root denotes a whole subtree once write enforcement is implemented. These declarations currently provide no write permission enforcement.
+Workspace/writable paths use slash separators. Absolute/traversal paths, empty segments, device names, nonportable characters, and trailing dots/spaces are rejected. Writable roots cannot be `.`, contain `.git`, or duplicate another root ignoring case. Overlap is allowed. These declarations provide no native write enforcement. Command arguments, including absolute trusted verifier paths, are separate from workspace path fields.
 
-Arguments after the executable may be empty or contain spaces. Shell expansion, environment-variable interpolation, pipelines, and shell-string parsing are not performed. Executable availability is not checked in this milestone.
+The safe YAML loader rejects anchors, aliases, duplicate/non-string keys, multiple documents, and unsafe tags. Limits are 1 MiB and 32 nesting levels. Quote strings that YAML may interpret as booleans or dates.
 
-YAML uses PyYAML's safe loader. Quote scalar values that YAML may interpret as booleans or dates when strings are intended. Anchors, aliases, duplicate keys, and multiple documents are not accepted.
+## Commands and exit statuses
 
-## CLI behavior
+```sh
+uv run --locked long-swe validate path/to/task.yaml
+uv run --locked long-swe verify path/to/task.yaml --retain-on-failure
+```
 
-| Invocation or outcome | Output | Exit status |
+| Outcome | Output | Exit |
 | --- | --- | --- |
-| `long-swe --help` | Usage text on stdout | 0 |
-| `long-swe --version` | Installed package version on stdout | 0 |
-| Valid manifest and workspace | One JSON object on stdout | 0 |
-| Invalid/unreadable manifest | JSON `TaskConfigError` on stderr | 2 |
-| Missing/escaping workspace path | JSON `WorkspaceError` on stderr | 2 |
-| Invalid arguments or unavailable command | Usage text on stderr | 2 |
+| Help/version | Text on stdout | 0 |
+| Valid manifest/workspace | Validation JSON on stdout | 0 |
+| Invalid/unreadable manifest or unresolved workspace | Error JSON on stderr | 2 |
+| Invalid arguments | Usage text on stderr | 2 |
+| Completed verification | Measured TaskResult JSON on stdout | 0 |
+| Run or verification failure | Failed TaskResult JSON on stdout | 1 |
 
-Library callers can use `load_task(Path(...))` for schema-only validation, then `resolve_workspace(task, manifest_path)` for filesystem checks. Both expose subclasses of `LabError` for expected failures. The CLI avoids dumping manifest values in errors, but field names and local paths can appear; review diagnostics before sharing them.
+Validate checks schema and paths only. It creates nothing and executes nothing. Verify uses a copied workspace and the [JSON verifier protocol](verifier-protocol.md); plain pytest console output is rejected. Options are `--retain-on-failure`, `--temp-parent` (existing directory outside source), `--max-stdout-bytes`, and `--max-stderr-bytes`. Run and replay remain unavailable.
+
+Library callers can parse with `load_task(Path(...))`, resolve paths with `resolve_workspace(task, manifest_path)`, then call `TaskRunner.verify(task, source)`. Review [execution semantics](execution.md) and [SECURITY.md](../SECURITY.md). Diagnostics/results may include local paths, command arguments, and program output; review before sharing.

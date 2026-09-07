@@ -1,19 +1,18 @@
-# Architecture and milestone boundary
+# Architecture and ownership
 
-The foundation separates three concerns: pure contracts, filesystem-aware configuration, and CLI presentation. There are no dependencies from `core` into either `config` or `cli`, and no subprocess calls in application code.
-
-## Implemented layers
-
-| Layer | Responsibility | Boundary |
+| Layer | Responsibility | Owned resources |
 | --- | --- | --- |
-| `core.task` | Versioned Pydantic task schema | No filesystem access or execution |
-| `core.state` | Legal lifecycle steps and explicit retry | No persistence or automatic transitions |
-| `core.result` | Execution, verification, and terminal report consistency | Caller must provide actual evidence |
-| `config.loader` | Bounded UTF-8 YAML parsing and schema diagnostics | Does not inspect the workspace |
-| `config.workspace` | Manifest-relative resolution and containment | Read-only snapshot of filesystem paths |
-| `cli.main` | Argument parsing, JSON output, exit status | Delegates all validation to the library |
+| `core` | Contracts, lifecycle, exceptions | No I/O |
+| `config` | YAML and manifest-relative paths | Read-only input access |
+| `execution.workspace` | Copies, limits, cleanup, retention | One temporary run root |
+| `execution.environment` | Allowlisted host inputs, fresh home/temp | New environment mapping |
+| `execution.process` | Explicit argv, capture, timing | Direct child and pipes |
+| `execution.timeout`, `_windows` | Descendant ownership/termination | POSIX group or Windows job |
+| `evaluation` | Trusted verifier execution and explicit protocol | Adapter and observed outcomes |
+| `execution.runner` | Copy → verify → cleanup → final result | Run lifetime |
+| `cli` | Arguments, serialization, exit status | Presentation |
 
-Contracts reject unknown fields to catch spelling mistakes. Numeric measurement fields reject booleans, strings, negative values, NaN, and infinity. Titles and descriptions trim surrounding whitespace; command arguments retain their exact content. Durations represent milliseconds without claiming timing determinism.
+Core contracts do not depend on execution or CLI modules. The adapter separates `build_command(task)` from `parse_result(execution)`. BehavioralVerifier accepts a process runner and adapter; TaskRunner accepts a verifier and workspace options.
 
 ## Lifecycle rules
 
@@ -26,34 +25,26 @@ Contracts reject unknown fields to catch spelling mistakes. Numeric measurement 
 | FAILED | INSPECTING |
 | COMPLETED | None |
 
-Inspection may go directly to testing to establish a baseline. Test feedback can return to implementation. A failed run must restart with inspection; there is no direct retry-to-completion shortcut. A passing verification is additionally required to construct a completed `TaskResult`.
+The coordinator uses inspection-to-testing. Completion follows passing verification and successful cleanup. It does not perform implementation operations or persist state.
 
-The state function is stateless. A future coordinator will own current state, attempt identity, retry counts, and timestamps. Schema validation alone cannot establish that a caller actually followed a workflow.
+## Outcome compatibility
 
-## Result semantics
+ExecutionResult keeps its foundation fields. New `stdout_truncated`, `stderr_truncated`, `stdout_decode_errors`, and `stderr_decode_errors` default to false, so old documents still validate.
 
-- `ExecutionResult`: captured output, argument vector, exit code, duration, timeout flag. An unobserved exit code is permitted only for a timeout; launch errors will use the future execution exception boundary.
-- `VerificationResult`: counted tests, exit code, duration, success, diagnostic messages. Infrastructure failure can have zero tests and no exit code. Failed verification always needs diagnostics. An adapter may reject otherwise passing tests on additional behavioral checks.
-- `TaskResult`: terminal state, total measured duration, optional execution records, final verification or failure reason. Intermediate commands may fail during investigation and debugging; a later passing verification may still complete the task.
+VerificationResult accepts either two strict nonnegative integer counts or two null counts. Null means unavailable evidence, such as malformed output or launch failure. Partial/negative/coerced counts and success without observed passing tests remain invalid. Consumers must handle null explicitly instead of treating it as zero.
 
-These models validate consistency, not authenticity. A future verifier must gather results itself and control evaluator inputs. The first milestone has no evaluator adapter or scoring implementation.
+TaskResult adds an optional `retained_workspace` for failed runs. Process durations measure launch, lifetime, capture, and cleanup using a monotonic clock. Task duration also includes workspace preparation and cleanup. Measured timings may differ between runs.
 
-## Planned extension boundaries
+## Failure boundaries
 
-These components are design intentions, not implemented capabilities:
+- Configuration errors fail before execution.
+- Copy failure removes the partial copy; no command starts.
+- Launch/setup failure produces ProcessLaunchError with measured duration and no invented exit code.
+- Capture/cleanup failure produces ProcessError and cannot claim successful verification.
+- Protocol failure preserves execution diagnostics and leaves test counts unknown.
+- Explicit failure retention preserves prepared workspaces. Incomplete preparation copies are removed.
+- Cleanup errors invalidate completion even if behavioral assertions passed.
 
-1. An execution layer will prepare independent workspaces and run explicit argument vectors with a normalized environment, bounded output, and process cleanup after timeouts.
-2. A coordinator will apply lifecycle transitions and emit events when operations actually occur.
-3. Verifier adapters will collect behavioral test outcomes independently of agent-authored claims.
-4. A trace layer will serialize events to JSONL; replay will read them without executing anything.
-5. Reporting will combine measured outcomes and diagnostics. Performance tasks will keep environment context and measured timings separate from correctness.
+## Deferred work
 
-No interfaces are frozen for these later layers. Their security and determinism properties require integration tests when implemented.
-
-## Filesystem and configuration limits
-
-Manifests are limited to 1 MiB and 32 nested YAML container levels to keep configuration parsing bounded. They cannot contain aliases, anchors, duplicate keys, non-string mapping keys, or unsafe construction tags. Datasets belong outside the manifest.
-
-Workspace resolution is relative to the resolved manifest directory. The workspace must exist inside that directory. Allowed writable paths may not exist yet, but any existing symlink resolution must stay within the workspace and outside `.git`. These checks do not create directories or enforce operating-system permissions.
-
-This boundary assumes a trusted local filesystem during validation. A future executor must recheck paths while preparing an isolated copy and must not advertise a local subprocess as protection against hostile code.
+Candidate operations, persistent events, replay, scoring, and sample tasks remain absent. Protocol validation does not authenticate verifier code. The [trust boundary](../SECURITY.md) is part of the contract.
