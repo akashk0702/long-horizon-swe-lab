@@ -1,4 +1,4 @@
-"""A validation-only CLI for the first project milestone."""
+"""Configuration validation and measured behavioral verification."""
 
 import argparse
 import json
@@ -10,17 +10,40 @@ from pathlib import Path
 from long_horizon_swe.config.loader import load_task
 from long_horizon_swe.config.workspace import resolve_workspace
 from long_horizon_swe.core.exceptions import LabError
+from long_horizon_swe.core.state import TaskState
+from long_horizon_swe.evaluation.verifier import BehavioralVerifier
+from long_horizon_swe.execution.options import ProcessOptions, WorkspaceOptions
+from long_horizon_swe.execution.process import ProcessRunner
+from long_horizon_swe.execution.runner import TaskRunner
+
+
+def nonnegative_integer(value: str) -> int:
+    try:
+        number = int(value)
+    except ValueError as error:
+        raise argparse.ArgumentTypeError("expected a nonnegative integer") from error
+    if number < 0:
+        raise argparse.ArgumentTypeError("expected a nonnegative integer")
+    return number
 
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="long-swe",
-        description="Validate software-engineering task contracts. No commands are executed.",
+        description="Validate task contracts or execute an operator-trusted verifier in a copy.",
     )
     parser.add_argument("--version", action="version", version=version("long-horizon-swe-lab"))
     commands = parser.add_subparsers(dest="command", required=True)
     validate = commands.add_parser("validate", help="validate a manifest and its workspace paths")
     validate.add_argument("task_file", type=Path, help="UTF-8 YAML task manifest")
+    verify = commands.add_parser("verify", help="run the JSON verifier in a disposable workspace")
+    verify.add_argument("task_file", type=Path)
+    verify.add_argument(
+        "--retain-on-failure", action="store_true", help="retain failed run directories"
+    )
+    verify.add_argument("--temp-parent", type=Path, help="existing directory outside the source")
+    verify.add_argument("--max-stdout-bytes", type=nonnegative_integer, default=1024 * 1024)
+    verify.add_argument("--max-stderr-bytes", type=nonnegative_integer, default=256 * 1024)
     return parser
 
 
@@ -29,6 +52,23 @@ def main(argv: Sequence[str] | None = None) -> int:
     try:
         task = load_task(args.task_file)
         workspace = resolve_workspace(task, args.task_file)
+        if args.command == "verify":
+            runner = TaskRunner(
+                BehavioralVerifier(
+                    ProcessRunner(
+                        ProcessOptions(
+                            max_stdout_bytes=args.max_stdout_bytes,
+                            max_stderr_bytes=args.max_stderr_bytes,
+                        )
+                    )
+                ),
+                WorkspaceOptions(
+                    temp_parent=args.temp_parent, retain_on_failure=args.retain_on_failure
+                ),
+            )
+            result = runner.verify(task, workspace)
+            print(result.model_dump_json())
+            return 0 if result.status == TaskState.COMPLETED else 1
     except LabError as error:
         print(
             json.dumps({"valid": False, "error": type(error).__name__, "message": str(error)}),

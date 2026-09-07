@@ -89,3 +89,41 @@ def test_installed_console_script_reports_version(tmp_path: Path) -> None:
     )
     assert result.returncode == 0, result.stderr
     assert result.stdout.strip() == "0.1.0a1"
+
+
+def test_verify_cli_returns_measured_json_without_touching_source(
+    manifest: Path, task_data: dict, capsys: pytest.CaptureFixture
+) -> None:
+    task_data["verification_command"] = [
+        sys.executable,
+        "-c",
+        "import json,pathlib; pathlib.Path('created').touch(); "
+        "ok=pathlib.Path('created').exists(); "
+        "print(json.dumps(dict(schema_version='1.0',passed=ok,"
+        "tests_passed=int(ok),tests_failed=int(not ok),details=[])))",
+    ]
+    manifest.write_text(yaml.safe_dump(task_data), encoding="utf-8")
+    assert main(["verify", str(manifest)]) == 0
+    report = json.loads(capsys.readouterr().out)
+    assert report["status"] == "completed"
+    assert report["verification"]["tests_passed"] == 1
+    assert report["executions"][0]["duration_ms"] > 0
+    assert not (manifest.parent / "repository" / "created").exists()
+
+
+def test_verify_cli_failure_reports_unknown_counts(
+    manifest: Path, task_data: dict, capsys: pytest.CaptureFixture
+) -> None:
+    task_data["verification_command"] = [sys.executable, "-c", "print('unstructured output')"]
+    manifest.write_text(yaml.safe_dump(task_data), encoding="utf-8")
+    assert main(["verify", str(manifest)]) == 1
+    report = json.loads(capsys.readouterr().out)
+    assert report["status"] == "failed"
+    assert report["verification"]["tests_passed"] is None
+
+
+@pytest.mark.parametrize("value", ["-1", "not-an-integer"])
+def test_cli_rejects_invalid_capture_limits(manifest: Path, value: str) -> None:
+    with pytest.raises(SystemExit) as error:
+        main(["verify", str(manifest), "--max-stdout-bytes", value])
+    assert error.value.code == 2

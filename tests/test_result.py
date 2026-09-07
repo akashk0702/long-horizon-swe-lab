@@ -143,3 +143,31 @@ def test_terminal_report_rejects_contradictory_outcomes(verification: dict) -> N
     ]:
         with pytest.raises(ValidationError):
             TaskResult(task_id="contract-check", duration_ms=0.0, **fields)
+
+
+def test_unknown_counts_must_be_paired_and_cannot_support_success(verification: dict) -> None:
+    for changes in [
+        {"tests_passed": None},
+        {"tests_failed": None},
+        {"tests_passed": None, "tests_failed": None},
+    ]:
+        with pytest.raises(ValidationError):
+            VerificationResult.model_validate(verification | changes)
+
+
+def test_old_execution_documents_default_new_capture_flags_to_false(execution: dict) -> None:
+    result = ExecutionResult.model_validate(execution)
+    assert not result.stdout_truncated
+    assert not result.stderr_truncated
+    assert not result.stdout_decode_errors
+
+
+def test_completed_report_cannot_claim_failed_workspace_retention(verification: dict) -> None:
+    with pytest.raises(ValidationError, match="retain"):
+        TaskResult(
+            task_id="contract-check",
+            duration_ms=1.0,
+            status=TaskState.COMPLETED,
+            verification=VerificationResult(**verification),
+            retained_workspace="some-run",
+        )

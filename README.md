@@ -2,73 +2,75 @@
 
 An independent software-engineering project exploring reproducible evaluation of multi-step repository-level coding workflows.
 
-The goal is to evaluate work that moves between investigation, implementation, and testing while retaining enough evidence to explain the final outcome. A unit-test harness answers whether assertions pass; repository-level workflows also need an explicit task contract, controlled execution, failure recovery, and a record of the work performed.
+Repository-level work moves between investigation, implementation, and testing. A unit-test harness checks assertions; a workflow evaluator also needs explicit task contracts, disposable workspaces, process cleanup, and measured diagnostics explaining failures.
 
-**Current milestone: foundation.** Implemented: validated task manifests, lifecycle transitions, typed outcome contracts, workspace path checks, and a `validate` CLI. Command execution, behavioral verification, trace recording, replay, and sample engineering tasks are **not implemented yet**. The models describe outcomes; they do not generate measured results.
+**Implemented:** validated manifests, lifecycle/result models, copied workspaces, bounded subprocess execution, timeout cleanup, a controlled environment, and an explicit JSON verifier protocol. `long-swe verify` executes an operator-trusted verifier in a fresh copy and returns measured results.
 
 ```sh
 git clone https://github.com/akashk0702/long-horizon-swe-lab.git
 cd long-horizon-swe-lab
 uv sync --locked
-uv run --locked long-swe --help
 uv run --locked pytest
+uv run --locked long-swe validate path/to/task.yaml
+uv run --locked long-swe verify path/to/task.yaml
 ```
 
-Python 3.12 and [uv](https://docs.astral.sh/uv/getting-started/installation/) are required. Correctness of the current foundation is checked through unit tests and filesystem/CLI integration tests, with Ruff, strict mypy, and CI on Linux and Windows.
+Use Python 3.12 and [uv](https://docs.astral.sh/uv/getting-started/installation/). Supply your own trusted manifest and verifier following the [task format](docs/task-format.md) and [verifier protocol](docs/verifier-protocol.md). Plain pytest console output is not this JSON protocol.
+
+The framework provides deterministic evaluation contracts and controlled execution; determinism of evaluated programs remains task-dependent. Local subprocesses are **not a security sandbox**. Read [SECURITY.md](SECURITY.md) before running commands.
 
 ## Overview
 
-A task declares a starting workspace, an argument vector for verification, a timeout, and writable paths. Domain contracts stay independent of filesystem I/O and CLI formatting. This makes it possible to add execution and verifier adapters without putting process management into task definitions.
+Each verification copies the source repository, creates fresh home/temp directories, runs the declared verifier, interprets its captured protocol output, constructs a measured result, and cleans up. The framework's copy/cleanup operations do not write to the source. Evaluated programs still have the host user's permissions.
 
 ## Architecture
 
 ```mermaid
-flowchart LR
-    CLI[CLI: validate] --> Loader[Bounded YAML loader]
-    Loader --> Task[TaskSpec]
-    CLI --> Paths[Read-only workspace checks]
-    Paths --> Task
-    CLI --> JSON[Validation JSON]
-    State[Lifecycle transitions] --> Reports[TaskResult contract]
-    Outcomes[ExecutionResult and VerificationResult] --> Reports
+flowchart TD
+    CLI[CLI: validate / verify] --> Config[TaskSpec and path validation]
+    Config --> Coordinator[TaskRunner]
+    Coordinator --> Copy[Fresh workspace copy]
+    Copy --> Verifier[BehavioralVerifier]
+    Verifier --> Env[Controlled environment]
+    Env --> Process[ProcessRunner: pipes, timing, process tree]
+    Process --> Execution[ExecutionResult]
+    Execution --> Adapter[JSON adapter: strict protocol validation]
+    Adapter --> Result[VerificationResult]
+    Result --> Coordinator
+    Coordinator --> Cleanup[Cleanup or explicit failure retention]
+    Cleanup --> Report[TaskResult JSON]
 ```
 
-```text
-src/long_horizon_swe/
-  core/     task, state, result, shared types, exceptions
-  config/   YAML loading and filesystem path resolution
-  cli/      argument parsing and validation output
-tests/      contract, lifecycle, filesystem, and CLI tests
-docs/       architecture decisions and task format
-```
-
-[Architecture decisions](docs/architecture.md) describe the extension boundaries. Unimplemented packages are intentionally absent.
+See [architecture and ownership](docs/architecture.md). Process management does not parse verifier messages; the adapter does not create subprocesses; the coordinator does not format CLI output.
 
 ## Task Lifecycle
 
-The states are `PENDING`, `INSPECTING`, `IMPLEMENTING`, `TESTING`, `FAILED`, and `COMPLETED`; their serialized values are lowercase. Work can return from implementation to investigation and from testing to implementation. Failure can retry through investigation. Completion is terminal and requires passing final verification in a `TaskResult`.
-
-The transition function validates one step; it does not persist state, count retries, or create events. See the [transition table](docs/architecture.md#lifecycle-rules).
+`PENDING → INSPECTING → TESTING → COMPLETED / FAILED` is the verification-only path. The domain model also permits implementation, feedback, and retry transitions. This milestone does not coordinate arbitrary implementation commands or persist events.
 
 ## Execution Model
 
-The current `ExecutionResult` contract records command arguments, an observed exit code, stdout, stderr, duration in milliseconds, and timeout status. A timed-out command cannot be successful even if its recorded exit code is zero. A launch failure must not be disguised as an invented process exit code.
+- Fresh working copy per run; Git metadata, virtual environments, tool caches, and environment files are excluded.
+- Links, Windows reparse points, and special files are rejected during copying; file/byte copy limits are configurable.
+- Explicit argument arrays, `shell=False`, explicit cwd, closed stdin, controlled environment, and observed exit codes.
+- POSIX process-group cleanup; Windows suspended launch into a kill-on-close Job Object.
+- Bounded stdout/stderr prefixes, UTF-8 diagnostics, explicit truncation flags, and measured durations.
+- Cleanup after success/failure; `--retain-on-failure` preserves failed runs for debugging.
 
-Future execution work will need workspace copying, process cleanup, measured timeouts, bounded output capture, and explicit environment configuration. **Path validation is not process isolation or a security sandbox.** This version never executes a manifest command.
+See [process and environment semantics](docs/execution.md) for limits and OS behavior.
 
 ## Verification
 
-`VerificationResult` requires observed test counts and diagnostics for failure. Passing requires exit code zero, at least one passing test, and zero failed tests. A successful process exit alone is insufficient. `TaskResult` rejects completion without passing verification.
+The JSON adapter requires exactly one versioned document from the **executed, operator-trusted verifier**. It rejects missing fields, duplicate keys, unsupported versions, contradictory counts, extra stdout, invalid UTF-8 stdout, truncation, timeouts, and success paired with a nonzero exit.
 
-These are data consistency checks, not a behavioral verifier. No test-output parser, reward function, tampering detector, or determinism guarantee for external programs is implemented. Future verifiers must judge behavior using actual tests.
+Workspace report files and human test summaries are not evidence sources. Unobserved counts are `null`, never invented zeroes. Completion requires passing final verification. Protocol validity cannot establish that a candidate-authored verifier is trustworthy; verifier code and assertions must be operator-controlled.
 
 ## Trace & Replay
 
-Planned: JSONL events captured at real execution boundaries and a replay command that renders saved evidence without rerunning commands. This milestone has no trace writer or replay command and publishes no simulated execution history.
+Deferred. There is no trace persistence, replay command, or simulated execution history.
 
 ## Example Tasks
 
-The multi-module feature, regression debugging, and performance optimization tasks are deferred to a later milestone. No sample repository, reference implementation, or benchmark result is included yet. The [manifest format](docs/task-format.md) contains a configuration illustration only.
+Deferred. No sample engineering repository, reference implementation, or benchmark is included. Tests create temporary fixtures for execution and protocol behavior only.
 
 ## Testing
 
@@ -81,36 +83,32 @@ uv run --locked pytest
 uv build --no-sources
 ```
 
-Tests cover invalid fields and paths, ambiguous YAML, manifest limits, result contradictions, lifecycle feedback and recovery, symlink containment, JSON round trips, installed entry points, and the guarantee that validation does not run a command. Core tests require no network APIs. Symlink integration tests skip with an explicit reason if the host denies symlink creation; CI also runs on Linux.
+CI runs on Linux and Windows with Python 3.12. Tests exercise actual subprocesses, descendant cleanup, bounded output, arguments, environment filtering, unchanged source contents, retention, CLI behavior, and protocol rejection. Symlink tests skip only when Windows denies link creation; Linux CI exercises them. Platform-specific tests skip on the other OS. Core tests use no network APIs.
 
 ## Design Decisions
 
-- Argument arrays preserve quoting and empty arguments; shell strings are rejected.
-- Relative, portable paths avoid dependence on the invoking shell's working directory. Writable roots are explicit files or directories, not glob patterns.
-- YAML loading rejects duplicate keys and aliases rather than silently changing a contract.
-- Domain validation is separate from disk access. `load_task` parses; `resolve_workspace` checks the filesystem.
-- Outcomes cannot claim success using contradictory exit codes or test counts.
-- Pinned dependencies in `uv.lock` reproduce the development environment. CI actions use immutable commit references and read-only repository permissions.
+- Separate process execution, protocol interpretation, and workspace lifetime.
+- Fail closed when process ownership or complete verifier evidence cannot be established.
+- Resolve executables explicitly; reject Windows batch files to avoid implicit shell invocation.
+- Allowlist parent environment inputs; task parameters use validated `TASK_` names.
+- Keep strict contracts without claiming arbitrary external programs are deterministic.
+- New capture flags default to false; unknown test counts have explicit null values.
 
 ## Limitations
 
-- This is a foundation release, not a working evaluation engine. `run`, `verify`, and `replay` are unavailable.
-- No isolation, timeout enforcement, environment normalization, command allowlist, or writable-path enforcement exists yet.
-- Path checks describe the filesystem at validation time. They do not prevent later symlink changes or hostile processes.
-- Models reject attribute reassignment, but nested metadata is not deeply immutable. Treat loaded contracts as snapshots and validate again at future execution boundaries.
-- Python 3.12 is the supported interpreter line. Other versions are not currently claimed to work.
-- No performance or evaluation results have been produced.
+No VM/container isolation, hostile-code containment, network restriction, general write enforcement, trace/replay, scoring, automatic dependency installation, or sample tasks exist. `run` and `replay` are unavailable. `allowed_paths` is validated but is not an OS write policy. Source trees must remain stable during copying. Tools and verifiers retain host permissions and network access.
+
+Only Python 3.12 on Linux and Windows is tested. Timing depends on host load; OS process startup is not always interruptible. Detached POSIX processes can escape group cleanup. See [SECURITY.md](SECURITY.md) and [execution limitations](docs/execution.md#limitations).
 
 ## Local Setup
 
-`uv sync --locked` installs the package in an isolated virtual environment using the committed lockfile. The first sync needs network access for dependencies; the test suite itself runs locally. CI uses uv 0.11.28.
-
-To validate your own manifest and existing workspace:
+`uv sync --locked` creates the development environment from `uv.lock`; the first sync needs downloads. CI uses uv 0.11.28. A source workspace's virtual environment is not copied; required verifier dependencies must already be installed in the chosen interpreter/tool environment.
 
 ```sh
-uv run --locked long-swe validate path/to/task.yaml
+uv run --locked long-swe verify path/to/task.yaml --retain-on-failure
+uv run --locked long-swe verify path/to/task.yaml --max-stdout-bytes 1048576 --max-stderr-bytes 262144
 ```
 
-Successful validation writes one JSON object to stdout and exits zero. Configuration and workspace errors write one JSON object to stderr and exit 2. Argument usage errors use argparse's standard text diagnostics and exit 2. Validation reports schema and path validity only; it does not report test results. See [task format and command behavior](docs/task-format.md).
+`validate` never executes commands. `verify` returns TaskResult JSON on stdout and exits 0 for completion or 1 for run/verification failure. Configuration errors use stderr and exit 2.
 
 Licensed under the [MIT License](LICENSE). Independent project by Akash Kumar.

@@ -15,3 +15,24 @@ class WorkspaceError(LabError):
 
 class InvalidStateTransition(LabError):
     """An operation would skip a required lifecycle boundary."""
+
+
+class EnvironmentConfigError(LabError):
+    """Execution environment configuration is invalid."""
+
+
+class ProcessError(LabError):
+    """A process could not be launched, captured, or cleaned up reliably."""
+
+    def __init__(self, message: str, command: tuple[str, ...], duration_ms: float) -> None:
+        super().__init__(message)
+        self.command = command
+        self.duration_ms = duration_ms
+
+
+class ProcessLaunchError(ProcessError):
+    """No command outcome exists because launch/setup failed."""
+
+
+class VerifierProtocolError(LabError):
+    """Observed output does not satisfy the configured verifier protocol."""
