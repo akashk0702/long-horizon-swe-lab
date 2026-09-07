@@ -32,6 +32,8 @@ class ExecutionResult(ContractModel):
     stderr_truncated: StrictBool = False
     stdout_decode_errors: StrictBool = False
     stderr_decode_errors: StrictBool = False
+    stdout_bytes_observed: NonNegativeInt | None = None
+    stderr_bytes_observed: NonNegativeInt | None = None
 
     @model_validator(mode="after")
     def exit_code_was_observed(self) -> Self:

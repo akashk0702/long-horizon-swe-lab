@@ -10,6 +10,8 @@ from long_horizon_swe.core.task import TaskSpec
 from long_horizon_swe.evaluation.verifier import BehavioralVerifier
 from long_horizon_swe.execution.options import WorkspaceOptions
 from long_horizon_swe.execution.workspace import PreparedWorkspace, prepare_workspace
+from long_horizon_swe.tracking.event import EventType, TaskValidatedPayload
+from long_horizon_swe.tracking.observer import NullObserver, Observer
 
 
 class TaskRunner:
@@ -19,9 +21,13 @@ class TaskRunner:
         self.verifier = verifier or BehavioralVerifier()
         self.options = options or WorkspaceOptions()
 
-    def verify(self, task: TaskSpec, source: Path) -> TaskResult:
+    def verify(
+        self, task: TaskSpec, source: Path, *, observer: Observer | None = None
+    ) -> TaskResult:
         # Metadata and environment dictionaries are not deeply frozen in Pydantic models.
         task = TaskSpec.model_validate(task.model_dump())
+        observations = observer or NullObserver()
+        observations.emit(EventType.TASK_VALIDATED, TaskValidatedPayload(task_id=task.id))
         started = time.perf_counter()
         state = transition(TaskState.PENDING, TaskState.INSPECTING)
         verification: VerificationResult | None = None
@@ -30,10 +36,10 @@ class TaskRunner:
         failure: str | None = None
         prepared: PreparedWorkspace | None = None
         try:
-            with prepare_workspace(source, self.options) as workspace:
+            with prepare_workspace(source, self.options, observer=observations) as workspace:
                 prepared = workspace
                 state = transition(state, TaskState.TESTING)
-                outcome = self.verifier.verify(task, workspace)
+                outcome = self.verifier.verify(task, workspace, observer=observations)
                 verification = outcome.verification
                 executions = (outcome.execution,) if outcome.execution is not None else ()
                 workspace.failed = not verification.passed
