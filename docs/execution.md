@@ -28,6 +28,8 @@ Python 3.12 nonblocking pipe reads work on both supported OSes. Finite drain bat
 
 Truncation flags indicate a byte limit was exceeded or EOF was not observed by the final drain deadline. Invalid UTF-8 uses U+FFFD replacement and a separate decode-error flag. A byte limit can split a multibyte character. Retained bytes and decoded strings use memory proportional to configured limits, not total output.
 
+Observed byte counters increment on every pipe read before prefix retention. They include discarded bytes and are independent of decoded string length. If capture stops before EOF, they count only bytes actually read. Trace process events record these counters and truncation metadata without raw stream contents.
+
 The JSON adapter rejects truncation of either stream and invalid UTF-8 stdout. Stderr is diagnostic text; replacement decoding there alone does not invalidate a complete protocol message.
 
 ## Environment

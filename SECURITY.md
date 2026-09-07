@@ -22,4 +22,14 @@ Core tests require no network APIs or credentials. The controlled environment do
 
 Captured output, command arguments, and retained workspaces can contain data emitted by tools. Review them before sharing. Retention is opt-in with no expiration. Do not put sensitive values in manifests or task environment parameters.
 
+## Trace and result privacy
+
+CLI verification persists `trace.jsonl` and `result.json` outside both the manifest directory and copied workspace. Output directories use random UUID4 names; no account or machine identifiers are encoded. POSIX run directories request owner-only permissions. Windows relies on inherited directory ACLs, so choose an output root with suitable access controls. Path checks assume a trusted, stable filesystem.
+
+Traces contain metadata only: task ID, executable basename, omitted argument count, relative workspace label, observed byte counts, timing, and verdicts. They exclude full command arguments, stdout/stderr, environment mappings, host paths, and raw exception messages. Task IDs and executable basenames remain operator-supplied labels; they are not automatically anonymized. There is no output preview mode.
+
+`result.json` is different: its versioned envelope preserves the exact TaskResult, including bounded stdout/stderr, configured argv, diagnostics, and any retained workspace path. It is **not redacted**. Keeping it outside the source tree prevents accidental source modification, not disclosure. Review artifacts before sharing; remove retained evidence when no longer needed. The default system-temp output directory may also be removed by OS maintenance.
+
+Traces are editable structured evidence, not cryptographic audit logs. Validation checks syntax, schemas, sequence, timing order, and terminal boundaries; it cannot authenticate a process or prove verifier assertions were honest. Replay never executes the recorded command. Missing/truncated records are not repaired or silently skipped.
+
 Report defects using minimal reproductions without sensitive data. Tests and documentation should use independently created fixtures.

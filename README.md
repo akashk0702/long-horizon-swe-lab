@@ -4,7 +4,7 @@ An independent software-engineering project exploring reproducible evaluation of
 
 Repository-level work moves between investigation, implementation, and testing. A unit-test harness checks assertions; a workflow evaluator also needs explicit task contracts, disposable workspaces, process cleanup, and measured diagnostics explaining failures.
 
-**Implemented:** validated manifests, lifecycle/result models, copied workspaces, bounded subprocess execution, timeout cleanup, a controlled environment, and an explicit JSON verifier protocol. `long-swe verify` executes an operator-trusted verifier in a fresh copy and returns measured results.
+**Implemented:** validated manifests, copied workspaces, bounded subprocess execution, timeout cleanup, a controlled environment, a strict JSON verifier protocol, and structured trace/replay. `long-swe verify` executes an operator-trusted verifier in a fresh copy, returns measured results, and saves execution evidence.
 
 ```sh
 git clone https://github.com/akashk0702/long-horizon-swe-lab.git
@@ -13,6 +13,7 @@ uv sync --locked
 uv run --locked pytest
 uv run --locked long-swe validate path/to/task.yaml
 uv run --locked long-swe verify path/to/task.yaml
+uv run --locked long-swe replay path/to/run/trace.jsonl
 ```
 
 Use Python 3.12 and [uv](https://docs.astral.sh/uv/getting-started/installation/). Supply your own trusted manifest and verifier following the [task format](docs/task-format.md) and [verifier protocol](docs/verifier-protocol.md). Plain pytest console output is not this JSON protocol.
@@ -21,13 +22,14 @@ The framework provides deterministic evaluation contracts and controlled executi
 
 ## Overview
 
-Each verification copies the source repository, creates fresh home/temp directories, runs the declared verifier, interprets its captured protocol output, constructs a measured result, and cleans up. The framework's copy/cleanup operations do not write to the source. Evaluated programs still have the host user's permissions.
+Each verification copies the source repository, creates fresh home/temp directories, runs the declared verifier, interprets its captured protocol output, constructs a measured result, and cleans up. A recorder observes operations as they happen and saves evidence outside the source and copied workspaces. The framework's copy/cleanup operations do not write to the source. Evaluated programs still have the host user's permissions.
 
 ## Architecture
 
 ```mermaid
 flowchart TD
-    CLI[CLI: validate / verify] --> Config[TaskSpec and path validation]
+    CLI[CLI: verify] --> Session[Verification session]
+    Session --> Config[TaskSpec and path validation]
     Config --> Coordinator[TaskRunner]
     Coordinator --> Copy[Fresh workspace copy]
     Copy --> Verifier[BehavioralVerifier]
@@ -39,13 +41,21 @@ flowchart TD
     Result --> Coordinator
     Coordinator --> Cleanup[Cleanup or explicit failure retention]
     Cleanup --> Report[TaskResult JSON]
+    Session -. run events .-> Recorder[Typed event recorder]
+    Coordinator -. validation and workspace events .-> Recorder
+    Verifier -. verification events .-> Recorder
+    Process -. process events .-> Recorder
+    Recorder --> Trace[trace.jsonl]
+    Report --> Artifact[Versioned result.json]
+    Trace --> Reader[Strict trace reader]
+    Reader --> Replay[CLI: replay / replay --json]
 ```
 
-See [architecture and ownership](docs/architecture.md). Process management does not parse verifier messages; the adapter does not create subprocesses; the coordinator does not format CLI output.
+See [architecture and ownership](docs/architecture.md). Process management does not parse verifier messages; the adapter does not create subprocesses; the recorder does not decide behavioral success. `validate` uses configuration checks only.
 
 ## Task Lifecycle
 
-`PENDING → INSPECTING → TESTING → COMPLETED / FAILED` is the verification-only path. The domain model also permits implementation, feedback, and retry transitions. This milestone does not coordinate arbitrary implementation commands or persist events.
+`PENDING → INSPECTING → TESTING → COMPLETED / FAILED` is the verification-only path. The domain model also permits implementation, feedback, and retry transitions. This milestone records verification operations; it does not coordinate arbitrary implementation commands.
 
 ## Execution Model
 
@@ -66,7 +76,17 @@ Workspace report files and human test summaries are not evidence sources. Unobse
 
 ## Trace & Replay
 
-Deferred. There is no trace persistence, replay command, or simulated execution history.
+Replay reads stored evidence and never reruns the original command. Every trace record has a schema version, UUID4 run identifier, contiguous sequence, UTC timestamp, monotonic elapsed milliseconds, explicit event type, and typed payload.
+
+```sh
+uv run --locked long-swe verify path/to/task.yaml --output-root path/outside/task-directory
+uv run --locked long-swe replay path/outside/task-directory/RUN_ID/trace.jsonl
+uv run --locked long-swe replay path/outside/task-directory/RUN_ID/trace.jsonl --json
+```
+
+By default, run artifacts persist under the system temporary directory's `long-swe-runs/RUN_ID/`. `verify` prints their location to stderr while keeping TaskResult JSON on stdout. Traces omit command arguments, environment values, raw output, and host paths. The separate `result.json` preserves exact bounded result diagnostics and may contain sensitive data. Neither artifact expires automatically.
+
+The reader validates every line and rejects corruption with a line number. A complete prefix without a terminal event is labeled incomplete. See [trace schema, failure evidence, and privacy](docs/tracing.md).
 
 ## Example Tasks
 
@@ -83,7 +103,7 @@ uv run --locked pytest
 uv build --no-sources
 ```
 
-CI runs on Linux and Windows with Python 3.12. Tests exercise actual subprocesses, descendant cleanup, bounded output, arguments, environment filtering, unchanged source contents, retention, CLI behavior, and protocol rejection. Symlink tests skip only when Windows denies link creation; Linux CI exercises them. Platform-specific tests skip on the other OS. Core tests use no network APIs.
+CI runs on Linux and Windows with Python 3.12. Tests exercise actual subprocesses, descendant cleanup, bounded output, environment filtering, unchanged source contents, retention, protocol rejection, trace corruption, failed-run evidence, atomic artifact replacement, and replay without execution. Symlink tests skip only when Windows denies link creation; Linux CI exercises them. Platform-specific tests skip on the other OS. Core tests use no network APIs.
 
 ## Design Decisions
 
@@ -92,11 +112,15 @@ CI runs on Linux and Windows with Python 3.12. Tests exercise actual subprocesse
 - Resolve executables explicitly; reject Windows batch files to avoid implicit shell invocation.
 - Allowlist parent environment inputs; task parameters use validated `TASK_` names.
 - Keep strict contracts without claiming arbitrary external programs are deterministic.
-- New capture flags default to false; unknown test counts have explicit null values.
+- Additive byte counters default to null for older results; newly executed processes report observed counts.
+- Record metadata at operation boundaries; never reconstruct missing events from a final result.
+- Keep recording failures separate from behavioral verdicts and surface incomplete evidence explicitly.
 
 ## Limitations
 
-No VM/container isolation, hostile-code containment, network restriction, general write enforcement, trace/replay, scoring, automatic dependency installation, or sample tasks exist. `run` and `replay` are unavailable. `allowed_paths` is validated but is not an OS write policy. Source trees must remain stable during copying. Tools and verifiers retain host permissions and network access.
+No VM/container isolation, hostile-code containment, network restriction, general write enforcement, scoring, automatic dependency installation, or sample tasks exist. `run` is unavailable. `allowed_paths` is validated but is not an OS write policy. Source trees must remain stable during copying. Tools and verifiers retain host permissions and network access.
+
+Traces are structured execution evidence, not cryptographic audit logs. They are editable and cannot authenticate verifier behavior. Flushes improve failure visibility but cannot guarantee durability after power loss or unavailable storage. Replay validates structure and ordering, not a full workflow proof.
 
 Only Python 3.12 on Linux and Windows is tested. Timing depends on host load; OS process startup is not always interruptible. Detached POSIX processes can escape group cleanup. See [SECURITY.md](SECURITY.md) and [execution limitations](docs/execution.md#limitations).
 
@@ -109,6 +133,6 @@ uv run --locked long-swe verify path/to/task.yaml --retain-on-failure
 uv run --locked long-swe verify path/to/task.yaml --max-stdout-bytes 1048576 --max-stderr-bytes 262144
 ```
 
-`validate` never executes commands. `verify` returns TaskResult JSON on stdout and exits 0 for completion or 1 for run/verification failure. Configuration errors use stderr and exit 2.
+`validate` never executes commands. `verify` returns TaskResult JSON on stdout and exits 0 for completion or 1 for run/verification failure. Configuration, trace, and artifact I/O errors use stderr and exit 2. `replay` exits 0 for a structurally valid trace (including a failed or incomplete run), and 2 for an unreadable/corrupt trace.
 
 Licensed under the [MIT License](LICENSE). Independent project by Akash Kumar.

@@ -13,5 +13,6 @@ build/
 .env.*
 !.env.example
 runs/
+.runs/
 .DS_Store
 Thumbs.db
