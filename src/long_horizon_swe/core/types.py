@@ -1,5 +1,6 @@
 """Shared validation rules for the public contracts."""
 
+import re
 from pathlib import PureWindowsPath
 from typing import Annotated
 
@@ -14,6 +15,7 @@ class ContractModel(BaseModel):
 
 NonNegativeInt = Annotated[int, Field(strict=True, ge=0)]
 DurationMs = Annotated[float, Field(strict=True, ge=0, allow_inf_nan=False)]
+PositiveSeconds = Annotated[float, Field(strict=True, gt=0, allow_inf_nan=False)]
 NonBlank = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1)]
 
 
@@ -27,6 +29,21 @@ def validate_command(command: tuple[str, ...]) -> tuple[str, ...]:
 
 
 Command = Annotated[tuple[str, ...], AfterValidator(validate_command)]
+
+
+def validate_environment(values: dict[str, str]) -> dict[str, str]:
+    """Only task parameters may be supplied; never override process configuration."""
+    for key, value in values.items():
+        if not re.fullmatch(r"TASK_[A-Z][A-Z0-9_]*", key):
+            raise ValueError("environment keys must use the TASK_ namespace")
+        if re.search(r"(?:^|_)(?:TOKEN|SECRET|PASSWORD|CREDENTIALS?|KEY)(?:_|$)", key):
+            raise ValueError("credential parameters are not supported")
+        if "\x00" in value:
+            raise ValueError("environment values cannot contain NUL characters")
+    return values
+
+
+TaskEnvironment = Annotated[dict[str, str], AfterValidator(validate_environment)]
 
 
 def portable_relative_path(value: str, *, allow_root: bool = False) -> str:

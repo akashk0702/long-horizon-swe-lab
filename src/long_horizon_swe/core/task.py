@@ -5,7 +5,14 @@ from typing import Annotated, Literal
 
 from pydantic import Field, JsonValue, StringConstraints, field_validator
 
-from long_horizon_swe.core.types import Command, ContractModel, NonBlank, portable_relative_path
+from long_horizon_swe.core.types import (
+    Command,
+    ContractModel,
+    NonBlank,
+    PositiveSeconds,
+    TaskEnvironment,
+    portable_relative_path,
+)
 
 TaskId = Annotated[str, StringConstraints(pattern=r"^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$")]
 
@@ -18,10 +25,11 @@ class TaskSpec(ContractModel):
     title: NonBlank
     description: NonBlank
     workspace: str
-    timeout_seconds: Annotated[float, Field(strict=True, gt=0, allow_inf_nan=False)]
+    timeout_seconds: PositiveSeconds
     verification_command: Command
     allowed_paths: Annotated[tuple[str, ...], Field(min_length=1)]
     metadata: dict[str, JsonValue] = Field(default_factory=dict)
+    environment: TaskEnvironment = Field(default_factory=dict)
 
     @field_validator("workspace")
     @classmethod

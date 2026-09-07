@@ -28,6 +28,10 @@ class ExecutionResult(ContractModel):
     stderr: str
     duration_ms: DurationMs
     timed_out: StrictBool
+    stdout_truncated: StrictBool = False
+    stderr_truncated: StrictBool = False
+    stdout_decode_errors: StrictBool = False
+    stderr_decode_errors: StrictBool = False
 
     @model_validator(mode="after")
     def exit_code_was_observed(self) -> Self:
@@ -41,7 +45,7 @@ class ExecutionResult(ContractModel):
 
 
 class VerificationResult(ContractModel):
-    """Behavioral test outcomes supplied by a future verifier adapter.
+    """Behavioral test outcomes supplied by a verifier adapter.
 
     Exit code zero is necessary but insufficient for success: the adapter must
     observe at least one passing test and no failures. Infrastructure failures
@@ -49,17 +53,17 @@ class VerificationResult(ContractModel):
     """
 
     passed: StrictBool
-    tests_passed: NonNegativeInt
-    tests_failed: NonNegativeInt
+    tests_passed: NonNegativeInt | None
+    tests_failed: NonNegativeInt | None
     exit_code: StrictInt | None
     duration_ms: DurationMs
     details: tuple[NonBlank, ...] = ()
 
     @model_validator(mode="after")
     def success_has_evidence(self) -> Self:
-        if self.passed and (
-            self.exit_code != 0 or self.tests_failed != 0 or self.tests_passed == 0
-        ):
+        if (self.tests_passed is None) != (self.tests_failed is None):
+            raise ValueError("test counts must be observed together or both be None")
+        if self.passed and (self.exit_code != 0 or self.tests_failed != 0 or not self.tests_passed):
             raise ValueError("passing verification requires exit_code 0 and passing tests only")
         if not self.passed and not self.details:
             raise ValueError("failed verification requires diagnostic details")
@@ -75,10 +79,13 @@ class TaskResult(ContractModel):
     verification: VerificationResult | None = None
     failure_reason: NonBlank | None = None
     executions: tuple[ExecutionResult, ...] = Field(default_factory=tuple)
+    retained_workspace: NonBlank | None = None
 
     @model_validator(mode="after")
     def terminal_status_agrees(self) -> Self:
         if self.status == TaskState.COMPLETED:
+            if self.retained_workspace is not None:
+                raise ValueError("completed tasks cannot retain a failed workspace")
             if self.verification is None or not self.verification.passed:
                 raise ValueError("completed tasks require passing verification")
             if self.failure_reason is not None:
