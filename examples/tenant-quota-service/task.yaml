@@ -1,0 +1,11 @@
+schema_version: '1.0'
+id: tenant-quota-feature
+title: Tenant-aware active-job quotas
+description: Add per-tenant active-job quotas while preserving the job service API and scheduling behavior.
+workspace: start
+timeout_seconds: 30
+verification_command: [python, -I, -m, tenant_quota_evaluator]
+allowed_paths: [src, tests]
+metadata:
+  category: multi-module-feature
+  implementation_language: python
