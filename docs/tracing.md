@@ -1,6 +1,6 @@
 # Structured trace and replay
 
-`long-swe verify` records actual verification operations as UTF-8 JSON Lines and persists a separate measured result. `long-swe replay` reads stored evidence and never reruns the original command. No candidate editing, file-change events, scoring, or sample tasks are implemented.
+`long-swe verify` records actual verification operations as UTF-8 JSON Lines and persists a separate measured result. `long-swe replay` reads stored evidence and never reruns the original command. No candidate editing, file-change events, or scoring are implemented. The [tenant quota task](../examples/tenant-quota-service/README.md) produces traces through this existing verification path.
 
 ## Event schema
 
