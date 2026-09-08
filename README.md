@@ -4,7 +4,7 @@ An independent software-engineering project exploring reproducible evaluation of
 
 Repository-level work moves between investigation, implementation, and testing. A unit-test harness checks assertions; a workflow evaluator also needs explicit task contracts, disposable workspaces, process cleanup, and measured diagnostics explaining failures.
 
-**Implemented:** validated manifests, copied workspaces, bounded subprocess execution, timeout cleanup, a controlled environment, a strict JSON verifier protocol, and structured trace/replay. Original tasks exercise [multi-module feature implementation](examples/tenant-quota-service/README.md) and [root-cause regression debugging](examples/routing-cache-regression/README.md) against functional services.
+**Implemented:** validated manifests, copied workspaces, bounded subprocess execution, timeout cleanup, a controlled environment, a strict JSON verifier protocol, and structured trace/replay. Three original tasks exercise [multi-module feature implementation](examples/tenant-quota-service/README.md), [root-cause debugging](examples/routing-cache-regression/README.md), and [performance optimization](examples/metadata-batch-optimization/README.md) against functional starting systems.
 
 ```sh
 git clone https://github.com/akashk0702/long-horizon-swe-lab.git
@@ -96,14 +96,18 @@ The baseline repository is functional and passes its 11 existing tests; the requ
 
 **[Routing cache regression — root-cause debugging](examples/routing-cache-regression/README.md).** Repair stale hierarchical route resolution after runtime configuration changes. The baseline passes 10 developer tests but fails 14 of 17 external behavioral cases. A two-file reference and a different conservative repair both pass all 17 cases; six incomplete repairs are rejected. Candidate instructions describe symptoms and compatibility without prescribing the fix.
 
+**[Metadata batch optimization — performance optimization with measured benchmarks](examples/metadata-batch-optimization/README.md).** Reduce repeated retrieval and JSON decoding while preserving ordered output, validation errors, and freshness between calls. The baseline passes all 16 functional evaluator cases and fails three efficiency cases. A one-file reference and a separate correct design pass all 19 cases. Instrumented collaborators verify per-distinct-profile work; real repeated timing measurements provide supporting evidence without a CI speedup threshold.
+
 ```sh
 uv run --locked long-swe verify examples/tenant-quota-service/task.yaml
 uv run --locked pytest tests/test_tenant_quota_task.py -v
 uv run --locked long-swe verify examples/routing-cache-regression/task.yaml
 uv run --locked pytest tests/test_routing_regression_task.py -v
+uv run --locked long-swe verify examples/metadata-batch-optimization/task.yaml
+uv run --locked pytest tests/test_metadata_optimization_task.py -v
 ```
 
-Both `verify` commands are expected to exit 1 on their unmodified baselines. Follow each task's README to prepare a working copy or validate its reference. `uv sync --locked` installs the separate local evaluators as development dependencies; they are outside candidate workspaces and the framework runtime wheel.
+All three `verify` commands are expected to exit 1 on their unmodified baselines. Follow each task's README to prepare a working copy or validate its reference. `uv sync --locked` installs the separate local evaluators as development dependencies; they are outside candidate workspaces and the framework runtime wheel.
 
 ## Testing
 
@@ -116,7 +120,7 @@ uv run --locked pytest
 uv build --no-sources
 ```
 
-CI runs on Linux and Windows with Python 3.12. Tests exercise actual subprocesses, descendant cleanup, bounded output, environment filtering, unchanged source contents, retention, protocol rejection, trace corruption, failed-run evidence, atomic artifact replacement, and replay without execution. Separate task-validation steps check each baseline, reference, repeated verdicts, weak implementations, and evaluator ownership. Routing checks also accept a different correct repair. Symlink tests skip only when Windows denies link creation; Linux CI exercises them. Platform-specific tests skip on the other OS. Tests use no network APIs.
+CI runs on Linux and Windows with Python 3.12. Tests exercise actual subprocesses, descendant cleanup, bounded output, environment filtering, unchanged source contents, retention, protocol rejection, trace corruption, failed-run evidence, atomic artifact replacement, and replay without execution. Separate task-validation steps check each baseline, reference, repeated verdicts, weak implementations, and evaluator ownership. Routing and metadata checks also accept different correct designs. Metadata checks gate on behavior and operation counts, and smoke-test structured timing output. Symlink tests skip only when Windows denies link creation; Linux CI exercises them. Platform-specific tests skip on the other OS. Tests use no network APIs.
 
 ## Design Decisions
 
@@ -131,7 +135,7 @@ CI runs on Linux and Windows with Python 3.12. Tests exercise actual subprocesse
 
 ## Limitations
 
-No VM/container isolation, hostile-code containment, network restriction, general write enforcement, scoring, or automatic task dependency installation exists. `run` is unavailable. `allowed_paths` is validated but is not an OS write policy. Source trees must remain stable during copying. Tools and verifiers retain host permissions and network access. Two original tasks are available; broader task coverage and measured difficulty calibration remain future work.
+No VM/container isolation, hostile-code containment, network restriction, general write enforcement, scoring, or automatic task dependency installation exists. `run` is unavailable. `allowed_paths` is validated but is not an OS write policy. Source trees must remain stable during copying. Tools and verifiers retain host permissions and network access. Three original tasks are available; their broader generalization and difficulty calibration remain unmeasured.
 
 Traces are structured execution evidence, not cryptographic audit logs. They are editable and cannot authenticate verifier behavior. Flushes improve failure visibility but cannot guarantee durability after power loss or unavailable storage. Replay validates structure and ordering, not a full workflow proof.
 
