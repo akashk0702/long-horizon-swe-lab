@@ -65,6 +65,7 @@ dependencies = [
 dev = [
     { name = "mypy" },
     { name = "pytest" },
+    { name = "routing-regression-evaluator" },
     { name = "ruff" },
     { name = "tenant-quota-evaluator" },
     { name = "types-pyyaml" },
@@ -80,6 +81,7 @@ requires-dist = [
 dev = [
     { name = "mypy", specifier = ">=1.18,<2" },
     { name = "pytest", specifier = ">=8.4,<10" },
+    { name = "routing-regression-evaluator", directory = "examples/routing-cache-regression/evaluator" },
     { name = "ruff", specifier = ">=0.14,<1" },
     { name = "tenant-quota-evaluator", directory = "examples/tenant-quota-service/evaluator" },
     { name = "types-pyyaml", specifier = ">=6.0.12" },
@@ -230,6 +232,11 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/86/bf/899e81e4cce32febab4fb42bb97dcdf66bc135272882d1987881a4b519e9/pyyaml-6.0.3-cp312-cp312-win_amd64.whl", hash = "sha256:5fcd34e47f6e0b794d17de1b4ff496c00986e1c83f7ab2fb8fcfe9616ff7477b", size = 154003, upload-time = "2025-09-25T21:32:21.167Z" },
     { url = "https://files.pythonhosted.org/packages/1a/08/67bd04656199bbb51dbed1439b7f27601dfb576fb864099c7ef0c3e55531/pyyaml-6.0.3-cp312-cp312-win_arm64.whl", hash = "sha256:64386e5e707d03a7e172c0701abfb7e10f0fb753ee1d773128192742712a98fd", size = 140344, upload-time = "2025-09-25T21:32:22.617Z" },
 ]
+
+[[package]]
+name = "routing-regression-evaluator"
+version = "0.1.0"
+source = { directory = "examples/routing-cache-regression/evaluator" }
 
 [[package]]
 name = "ruff"
