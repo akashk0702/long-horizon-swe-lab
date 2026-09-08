@@ -6,17 +6,18 @@ Repository-level work moves between investigation, implementation, and testing. 
 
 **Implemented:** validated manifests, copied workspaces, bounded subprocess execution, timeout cleanup, a controlled environment, a strict JSON verifier protocol, and structured trace/replay. Three original tasks exercise [multi-module feature implementation](examples/tenant-quota-service/README.md), [root-cause debugging](examples/routing-cache-regression/README.md), and [performance optimization](examples/metadata-batch-optimization/README.md) against functional starting systems.
 
+**Validated on Linux and Windows with Python 3.12:** [CI results](https://github.com/akashk0702/long-horizon-swe-lab/actions/workflows/ci.yml). The current runner verifies prepared repository states; task-level tests validate reference solutions and reject incomplete implementations.
+
 ```sh
 git clone https://github.com/akashk0702/long-horizon-swe-lab.git
 cd long-horizon-swe-lab
 uv sync --locked
-uv run --locked pytest
-uv run --locked long-swe validate path/to/task.yaml
-uv run --locked long-swe verify path/to/task.yaml
-uv run --locked long-swe replay path/to/run/trace.jsonl
+uv run --locked python examples/tenant-quota-service/prepare_task.py ../quota-demo --reference
+uv run --locked long-swe validate ../quota-demo/task.yaml
+uv run --locked long-swe verify ../quota-demo/task.yaml
 ```
 
-Use Python 3.12 and [uv](https://docs.astral.sh/uv/getting-started/installation/). Supply your own trusted manifest and verifier following the [task format](docs/task-format.md) and [verifier protocol](docs/verifier-protocol.md). Plain pytest console output is not this JSON protocol.
+Use Python 3.12 and [uv](https://docs.astral.sh/uv/getting-started/installation/). Choose a new destination if `../quota-demo` already exists. This demo applies the supplied reference, passes 14 evaluator cases, and prints its artifact directory to stderr. Run `uv run --locked long-swe replay ARTIFACT_DIRECTORY/trace.jsonl` with that reported directory to inspect the evidence. See the [task format](docs/task-format.md) and [verifier protocol](docs/verifier-protocol.md) for your own trusted tasks; plain pytest output is not this protocol.
 
 The framework provides deterministic evaluation contracts and controlled execution; determinism of evaluated programs remains task-dependent. Local subprocesses are **not a security sandbox**. Read [SECURITY.md](SECURITY.md) before running commands.
 
@@ -55,7 +56,7 @@ See [architecture and ownership](docs/architecture.md). Process management does 
 
 ## Task Lifecycle
 
-`PENDING → INSPECTING → TESTING → COMPLETED / FAILED` is the verification-only path. The domain model also permits implementation, feedback, and retry transitions. This milestone records verification operations; it does not coordinate arbitrary implementation commands.
+`PENDING → INSPECTING → TESTING → COMPLETED / FAILED` is the verification-only path. The domain model also permits implementation, feedback, and retry transitions. The runner records verification operations; it does not coordinate arbitrary implementation commands.
 
 ## Execution Model
 
@@ -118,9 +119,10 @@ uv run --locked ruff format --check .
 uv run --locked mypy
 uv run --locked pytest
 uv build --no-sources
+uv run --locked python scripts/check_distribution.py
 ```
 
-CI runs on Linux and Windows with Python 3.12. Tests exercise actual subprocesses, descendant cleanup, bounded output, environment filtering, unchanged source contents, retention, protocol rejection, trace corruption, failed-run evidence, atomic artifact replacement, and replay without execution. Separate task-validation steps check each baseline, reference, repeated verdicts, weak implementations, and evaluator ownership. Routing and metadata checks also accept different correct designs. Metadata checks gate on behavior and operation counts, and smoke-test structured timing output. Symlink tests skip only when Windows denies link creation; Linux CI exercises them. Platform-specific tests skip on the other OS. Tests use no network APIs.
+CI runs on Linux and Windows with Python 3.12. Tests exercise actual subprocesses, descendant cleanup, bounded output, environment filtering, unchanged source contents, retention, protocol rejection, trace corruption, failed-run evidence, atomic artifact replacement, and replay without execution. Separate task-validation steps check each baseline, reference, repeated verdicts, weak implementations, and evaluator ownership. Routing and metadata checks also accept different correct designs. Metadata checks gate on behavior and operation counts, and smoke-test structured timing output. After building, an offline wheel installation checks CLI startup and downstream typing with both valid and invalid API usage, reusing the locked dependencies. Symlink tests skip only when Windows denies link creation; Linux CI exercises them. Platform-specific tests skip on the other OS. Tests use no network APIs.
 
 ## Design Decisions
 

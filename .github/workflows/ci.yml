@@ -44,3 +44,5 @@ jobs:
         run: uv run --locked pytest tests/test_metadata_optimization_task.py -v
       - name: Build distribution
         run: uv build --no-sources
+      - name: Check installed wheel CLI and consumer typing
+        run: uv run --locked python scripts/check_distribution.py
