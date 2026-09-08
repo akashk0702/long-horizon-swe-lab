@@ -63,6 +63,7 @@ dependencies = [
 
 [package.dev-dependencies]
 dev = [
+    { name = "metadata-optimization-evaluator" },
     { name = "mypy" },
     { name = "pytest" },
     { name = "routing-regression-evaluator" },
@@ -79,6 +80,7 @@ requires-dist = [
 
 [package.metadata.requires-dev]
 dev = [
+    { name = "metadata-optimization-evaluator", directory = "examples/metadata-batch-optimization/evaluator" },
     { name = "mypy", specifier = ">=1.18,<2" },
     { name = "pytest", specifier = ">=8.4,<10" },
     { name = "routing-regression-evaluator", directory = "examples/routing-cache-regression/evaluator" },
@@ -86,6 +88,11 @@ dev = [
     { name = "tenant-quota-evaluator", directory = "examples/tenant-quota-service/evaluator" },
     { name = "types-pyyaml", specifier = ">=6.0.12" },
 ]
+
+[[package]]
+name = "metadata-optimization-evaluator"
+version = "0.1.0"
+source = { directory = "examples/metadata-batch-optimization/evaluator" }
 
 [[package]]
 name = "mypy"

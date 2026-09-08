@@ -16,11 +16,12 @@ dependencies = ["pydantic>=2.12,<3", "PyYAML>=6.0.3,<7"]
 long-swe = "long_horizon_swe.cli.main:main"
 
 [dependency-groups]
-dev = ["pytest>=8.4,<10", "ruff>=0.14,<1", "mypy>=1.18,<2", "types-PyYAML>=6.0.12", "tenant-quota-evaluator", "routing-regression-evaluator"]
+dev = ["pytest>=8.4,<10", "ruff>=0.14,<1", "mypy>=1.18,<2", "types-PyYAML>=6.0.12", "tenant-quota-evaluator", "routing-regression-evaluator", "metadata-optimization-evaluator"]
 
 [tool.uv.sources]
 tenant-quota-evaluator = {path = "examples/tenant-quota-service/evaluator"}
 routing-regression-evaluator = {path = "examples/routing-cache-regression/evaluator"}
+metadata-optimization-evaluator = {path = "examples/metadata-batch-optimization/evaluator"}
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/long_horizon_swe"]
@@ -40,4 +41,4 @@ select = ["E", "F", "I", "UP", "B", "SIM"]
 [tool.mypy]
 python_version = "3.12"
 strict = true
-files = ["src"]
+files = ["src", "examples/metadata-batch-optimization/evaluator/src", "examples/metadata-batch-optimization/benchmark/run_benchmark.py"]

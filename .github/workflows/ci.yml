@@ -35,10 +35,12 @@ jobs:
       - name: Type check
         run: uv run --locked mypy
       - name: Test
-        run: uv run --locked pytest --ignore=tests/test_tenant_quota_task.py --ignore=tests/test_routing_regression_task.py
+        run: uv run --locked pytest --ignore=tests/test_tenant_quota_task.py --ignore=tests/test_routing_regression_task.py --ignore=tests/test_metadata_optimization_task.py
       - name: Validate tenant quota task and weak solutions
         run: uv run --locked pytest tests/test_tenant_quota_task.py -v
       - name: Validate routing regression and alternate repairs
         run: uv run --locked pytest tests/test_routing_regression_task.py -v
+      - name: Validate metadata behavior, work counts, and measured output
+        run: uv run --locked pytest tests/test_metadata_optimization_task.py -v
       - name: Build distribution
         run: uv build --no-sources

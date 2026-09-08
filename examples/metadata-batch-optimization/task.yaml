@@ -1,0 +1,11 @@
+schema_version: '1.0'
+id: metadata-batch-optimization
+title: Repeated metadata work in ordered batch enrichment
+description: Optimize repeated metadata decoding in a batch enrichment pipeline while preserving ordering, validation, and error semantics.
+workspace: start
+timeout_seconds: 30
+verification_command: [python, -I, -m, metadata_optimization_evaluator]
+allowed_paths: [src, tests]
+metadata:
+  category: performance-optimization
+  implementation_language: python
