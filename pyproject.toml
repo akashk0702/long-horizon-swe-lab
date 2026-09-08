@@ -16,7 +16,10 @@ dependencies = ["pydantic>=2.12,<3", "PyYAML>=6.0.3,<7"]
 long-swe = "long_horizon_swe.cli.main:main"
 
 [dependency-groups]
-dev = ["pytest>=8.4,<10", "ruff>=0.14,<1", "mypy>=1.18,<2", "types-PyYAML>=6.0.12"]
+dev = ["pytest>=8.4,<10", "ruff>=0.14,<1", "mypy>=1.18,<2", "types-PyYAML>=6.0.12", "tenant-quota-evaluator"]
+
+[tool.uv.sources]
+tenant-quota-evaluator = {path = "examples/tenant-quota-service/evaluator"}
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/long_horizon_swe"]

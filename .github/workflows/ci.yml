@@ -35,6 +35,8 @@ jobs:
       - name: Type check
         run: uv run --locked mypy
       - name: Test
-        run: uv run --locked pytest
+        run: uv run --locked pytest --ignore=tests/test_tenant_quota_task.py
+      - name: Validate tenant quota task and weak solutions
+        run: uv run --locked pytest tests/test_tenant_quota_task.py -v
       - name: Build distribution
         run: uv build --no-sources
