@@ -15,6 +15,13 @@ from long_horizon_swe.core.result import ExecutionResult
 from long_horizon_swe.core.types import Command, PositiveSeconds
 from long_horizon_swe.execution.options import ProcessOptions
 from long_horizon_swe.execution.timeout import ProcessTree
+from long_horizon_swe.tracking.event import (
+    EmptyPayload,
+    EventType,
+    ProcessCompletedPayload,
+    ProcessStartedPayload,
+)
+from long_horizon_swe.tracking.observer import NullObserver, Observer
 
 
 class _Capture:
@@ -24,6 +31,7 @@ class _Capture:
         self.data = bytearray()
         self.truncated = False
         self.eof = False
+        self.observed = 0
         os.set_blocking(stream.fileno(), False)
 
     def drain(self) -> bool:
@@ -40,6 +48,7 @@ class _Capture:
                 self.eof = True
                 break
             active = True
+            self.observed += len(chunk)
             available = self.limit - len(self.data)
             self.data.extend(chunk[:available])
             self.truncated |= len(chunk) > available
@@ -93,9 +102,11 @@ class ProcessRunner:
         cwd: Path,
         environment: Mapping[str, str],
         timeout_seconds: float,
+        observer: Observer | None = None,
     ) -> ExecutionResult:
         arguments = TypeAdapter(Command).validate_python(command)
         timeout = TypeAdapter(PositiveSeconds).validate_python(timeout_seconds)
+        observations = observer or NullObserver()
         started = time.perf_counter()
         process: subprocess.Popen[bytes] | None = None
         tree: ProcessTree | None = None
@@ -117,6 +128,13 @@ class ProcessRunner:
                 creationflags=tree.creation_flags,
             )
             tree.attach(process)
+            observations.emit(
+                EventType.PROCESS_STARTED,
+                ProcessStartedPayload(
+                    executable_name=executable.replace("\\", "/").rsplit("/", 1)[-1],
+                    arguments_omitted=len(arguments) - 1,
+                ),
+            )
             assert process.stdout is not None and process.stderr is not None
             stdout = _Capture(process.stdout, self.options.max_stdout_bytes)
             stderr = _Capture(process.stderr, self.options.max_stderr_bytes)
@@ -157,6 +175,7 @@ class ProcessRunner:
                 active = stdout.drain() | stderr.drain()
                 if time.perf_counter() - started >= timeout:
                     timed_out = True
+                    observations.emit(EventType.PROCESS_TIMED_OUT, EmptyPayload())
                     break
                 if not active:
                     time.sleep(0.005)
@@ -195,7 +214,7 @@ class ProcessRunner:
                 process.stderr.close()
         out, out_errors = stdout.text()
         err, err_errors = stderr.text()
-        return ExecutionResult(
+        result = ExecutionResult(
             command=arguments,
             exit_code=process.returncode,
             stdout=out,
@@ -206,4 +225,19 @@ class ProcessRunner:
             stderr_truncated=stderr.truncated,
             stdout_decode_errors=out_errors,
             stderr_decode_errors=err_errors,
+            stdout_bytes_observed=stdout.observed,
+            stderr_bytes_observed=stderr.observed,
         )
+        observations.emit(
+            EventType.PROCESS_COMPLETED,
+            ProcessCompletedPayload(
+                exit_code=result.exit_code,
+                duration_ms=result.duration_ms,
+                timed_out=result.timed_out,
+                stdout_bytes_observed=stdout.observed,
+                stderr_bytes_observed=stderr.observed,
+                stdout_truncated=result.stdout_truncated,
+                stderr_truncated=result.stderr_truncated,
+            ),
+        )
+        return result

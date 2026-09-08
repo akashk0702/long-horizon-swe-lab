@@ -11,6 +11,8 @@ from pathlib import Path
 
 from long_horizon_swe.core.exceptions import WorkspaceError
 from long_horizon_swe.execution.options import WorkspaceOptions
+from long_horizon_swe.tracking.event import EmptyPayload, EventType, WorkspacePayload
+from long_horizon_swe.tracking.observer import NullObserver, Observer
 
 _EXCLUDED = frozenset(
     {".git", ".venv", "__pycache__", ".pytest_cache", ".mypy_cache", ".ruff_cache"}
@@ -77,20 +79,24 @@ def _remove_readonly(function: object, path: str, error: BaseException) -> None:
         function(path)
 
 
-def _cleanup(root: Path, parent: Path) -> None:
+def _cleanup(root: Path, parent: Path, observer: Observer) -> None:
+    observer.emit(EventType.WORKSPACE_CLEANUP_STARTED, EmptyPayload())
     if root.parent != parent or root.resolve(strict=False).parent != parent:
         raise WorkspaceError("refusing cleanup of a run root outside its temporary parent")
     info = root.lstat()
     if stat.S_ISLNK(info.st_mode) or getattr(info, "st_file_attributes", 0) & 0x400:
         raise WorkspaceError("refusing cleanup of a replaced run root")
     shutil.rmtree(root, onexc=_remove_readonly)
+    observer.emit(EventType.WORKSPACE_CLEANED, EmptyPayload())
 
 
 @contextmanager
 def prepare_workspace(
-    source: Path, options: WorkspaceOptions | None = None
+    source: Path, options: WorkspaceOptions | None = None, *, observer: Observer | None = None
 ) -> Iterator[PreparedWorkspace]:
     limits = options or WorkspaceOptions()
+    observations = observer or NullObserver()
+    observations.emit(EventType.WORKSPACE_PREPARATION_STARTED, EmptyPayload())
     root: Path | None = None
     prepared: PreparedWorkspace | None = None
     try:
@@ -106,21 +112,23 @@ def prepare_workspace(
         home.mkdir()
         temporary.mkdir()
         prepared = PreparedWorkspace(root, root / "repository", home, temporary)
+        observations.emit(EventType.WORKSPACE_PREPARED, WorkspacePayload())
     except (OSError, RuntimeError) as error:
         if root is not None:
-            _cleanup(root, parent)
+            _cleanup(root, parent, observations)
         raise WorkspaceError("cannot prepare the execution workspace") from error
     except WorkspaceError:
         if root is not None:
-            _cleanup(root, parent)
+            _cleanup(root, parent, observations)
         raise
     try:
         yield prepared
     finally:
         if limits.retain_on_failure and prepared.failed:
             prepared.retained = True
+            observations.emit(EventType.WORKSPACE_RETAINED, WorkspacePayload())
         else:
             try:
-                _cleanup(root, parent)
+                _cleanup(root, parent, observations)
             except OSError as error:
                 raise WorkspaceError(f"cannot clean run directory: {prepared.root}") from error

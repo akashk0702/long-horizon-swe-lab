@@ -9,6 +9,8 @@ from long_horizon_swe.evaluation.adapters import JsonVerifierAdapter, VerifierAd
 from long_horizon_swe.execution.environment import build_environment
 from long_horizon_swe.execution.process import ProcessRunner
 from long_horizon_swe.execution.workspace import PreparedWorkspace
+from long_horizon_swe.tracking.event import EmptyPayload, EventType, VerificationCompletedPayload
+from long_horizon_swe.tracking.observer import NullObserver, Observer
 
 
 @dataclass(frozen=True)
@@ -24,7 +26,11 @@ class BehavioralVerifier:
         self.process_runner = process_runner or ProcessRunner()
         self.adapter = adapter or JsonVerifierAdapter()
 
-    def verify(self, task: TaskSpec, workspace: PreparedWorkspace) -> VerificationOutcome:
+    def verify(
+        self, task: TaskSpec, workspace: PreparedWorkspace, *, observer: Observer | None = None
+    ) -> VerificationOutcome:
+        observations = observer or NullObserver()
+        observations.emit(EventType.VERIFICATION_STARTED, EmptyPayload())
         environment = build_environment(workspace, task.environment)
         try:
             execution = self.process_runner.run(
@@ -32,28 +38,38 @@ class BehavioralVerifier:
                 cwd=workspace.cwd,
                 environment=environment,
                 timeout_seconds=task.timeout_seconds,
+                observer=observations,
             )
         except ProcessError as error:
-            return VerificationOutcome(
-                None,
-                VerificationResult(
-                    passed=False,
-                    tests_passed=None,
-                    tests_failed=None,
-                    exit_code=None,
-                    duration_ms=error.duration_ms,
-                    details=(f"{type(error).__name__}: {error}",),
-                ),
-            )
-        try:
-            verification = self.adapter.parse_result(execution)
-        except VerifierProtocolError as error:
+            execution = None
             verification = VerificationResult(
                 passed=False,
                 tests_passed=None,
                 tests_failed=None,
-                exit_code=execution.exit_code,
-                duration_ms=execution.duration_ms,
-                details=(str(error),),
+                exit_code=None,
+                duration_ms=error.duration_ms,
+                details=(f"{type(error).__name__}: {error}",),
             )
+        else:
+            assert execution is not None
+            try:
+                verification = self.adapter.parse_result(execution)
+            except VerifierProtocolError as error:
+                verification = VerificationResult(
+                    passed=False,
+                    tests_passed=None,
+                    tests_failed=None,
+                    exit_code=execution.exit_code,
+                    duration_ms=execution.duration_ms,
+                    details=(str(error),),
+                )
+        observations.emit(
+            EventType.VERIFICATION_COMPLETED,
+            VerificationCompletedPayload(
+                passed=verification.passed,
+                tests_passed=verification.tests_passed,
+                tests_failed=verification.tests_failed,
+                duration_ms=verification.duration_ms,
+            ),
+        )
         return VerificationOutcome(execution, verification)
