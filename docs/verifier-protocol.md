@@ -28,6 +28,6 @@ VerifierAdapter separates `build_command(task)` from `parse_result(execution)`. 
 
 ## Trust requirement
 
-Schema validity is not proof that meaningful tests ran. The operator must own the verifier executable, assertions, manifest, and adapter. Keep verifier code outside candidate-writable paths. Do not configure a candidate self-reporting script as the trusted command. This milestone does not authenticate verifier code or detect test tampering and cannot turn an untrusted self-report into independent evidence.
+Schema validity is not proof that meaningful tests ran. The operator must own the verifier executable, assertions, manifest, and adapter. Keep verifier code outside candidate-writable paths. Do not configure a candidate self-reporting script as the trusted command. The framework does not authenticate verifier code and cannot turn an untrusted self-report into independent evidence. The three example evaluators add before/after source fingerprints to detect persistent evaluator edits; these cannot prevent transient restored changes or malicious interpreter manipulation.
 
-Integration tests execute an operator-authored verifier against passing and failing file contents, plus invalid protocols and preexisting report files. No sample benchmark tasks are included.
+Integration tests execute an operator-authored verifier against passing and failing file contents, plus invalid protocols and preexisting report files. The [three original engineering tasks](../README.md#example-tasks) use separately installed evaluator-owned assertions outside their starting workspaces. Their reference overlays validate solvability and are never consulted for acceptance or code-similarity checks.
