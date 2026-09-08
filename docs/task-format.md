@@ -55,6 +55,6 @@ uv run --locked long-swe verify path/to/task.yaml --retain-on-failure
 | Completed verification | Measured TaskResult JSON on stdout | 0 |
 | Run or verification failure | Failed TaskResult JSON on stdout | 1 |
 
-Validate checks schema and paths only. It creates nothing and executes nothing. Verify uses a copied workspace and the [JSON verifier protocol](verifier-protocol.md); plain pytest console output is rejected. Options are `--retain-on-failure`, `--temp-parent` (existing directory outside source), `--max-stdout-bytes`, and `--max-stderr-bytes`. Run and replay remain unavailable.
+Validate checks schema and paths only. It creates nothing and executes nothing. Verify uses a copied workspace and the [JSON verifier protocol](verifier-protocol.md); plain pytest console output is rejected. Options are `--retain-on-failure`, `--temp-parent` (existing directory outside source), `--max-stdout-bytes`, `--max-stderr-bytes`, and `--output-root` (outside the manifest directory). `replay TRACE [--json]` reads saved evidence without execution; `run` remains unavailable.
 
 Library callers can parse with `load_task(Path(...))`, resolve paths with `resolve_workspace(task, manifest_path)`, then call `TaskRunner.verify(task, source)`. Review [execution semantics](execution.md) and [SECURITY.md](../SECURITY.md). Diagnostics/results may include local paths, command arguments, and program output; review before sharing.

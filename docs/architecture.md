@@ -58,4 +58,4 @@ TaskResult adds an optional `retained_workspace` for failed runs. Process durati
 
 ## Deferred work
 
-Candidate operations, scoring, and sample tasks remain absent. Protocol validation does not authenticate verifier code. The [trust boundary](../SECURITY.md) and [trace semantics](tracing.md) are part of the contract.
+Candidate operations and scoring remain absent. The first [original feature task](../examples/tenant-quota-service/README.md) uses the existing framework without extending its runtime. Protocol validation does not authenticate verifier code. The [trust boundary](../SECURITY.md) and [trace semantics](tracing.md) are part of the contract.
