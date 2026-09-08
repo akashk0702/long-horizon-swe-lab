@@ -4,7 +4,7 @@ An independent software-engineering project exploring reproducible evaluation of
 
 Repository-level work moves between investigation, implementation, and testing. A unit-test harness checks assertions; a workflow evaluator also needs explicit task contracts, disposable workspaces, process cleanup, and measured diagnostics explaining failures.
 
-**Implemented:** validated manifests, copied workspaces, bounded subprocess execution, timeout cleanup, a controlled environment, a strict JSON verifier protocol, and structured trace/replay. The first original task, [tenant quotas](examples/tenant-quota-service/README.md), exercises multi-module feature implementation against a functional service.
+**Implemented:** validated manifests, copied workspaces, bounded subprocess execution, timeout cleanup, a controlled environment, a strict JSON verifier protocol, and structured trace/replay. Original tasks exercise [multi-module feature implementation](examples/tenant-quota-service/README.md) and [root-cause regression debugging](examples/routing-cache-regression/README.md) against functional services.
 
 ```sh
 git clone https://github.com/akashk0702/long-horizon-swe-lab.git
@@ -94,12 +94,16 @@ The reader validates every line and rejects corruption with a line number. A com
 
 The baseline repository is functional and passes its 11 existing tests; the requested quota feature is absent. Fourteen evaluator-owned behavioral cases live outside the starting workspace. A three-file reference overlay validates task solvability only; the verifier judges behavior rather than code similarity. Five deliberately weak temporary variants are rejected by task-quality checks.
 
+**[Routing cache regression — root-cause debugging](examples/routing-cache-regression/README.md).** Repair stale hierarchical route resolution after runtime configuration changes. The baseline passes 10 developer tests but fails 14 of 17 external behavioral cases. A two-file reference and a different conservative repair both pass all 17 cases; six incomplete repairs are rejected. Candidate instructions describe symptoms and compatibility without prescribing the fix.
+
 ```sh
 uv run --locked long-swe verify examples/tenant-quota-service/task.yaml
 uv run --locked pytest tests/test_tenant_quota_task.py -v
+uv run --locked long-swe verify examples/routing-cache-regression/task.yaml
+uv run --locked pytest tests/test_routing_regression_task.py -v
 ```
 
-The first command is expected to exit 1 on the unmodified baseline. Follow the [task README](examples/tenant-quota-service/README.md) to prepare a working copy or validate the reference. `uv sync --locked` installs the independent local evaluator as a development dependency; it is not part of the candidate workspace or the framework runtime wheel.
+Both `verify` commands are expected to exit 1 on their unmodified baselines. Follow each task's README to prepare a working copy or validate its reference. `uv sync --locked` installs the separate local evaluators as development dependencies; they are outside candidate workspaces and the framework runtime wheel.
 
 ## Testing
 
@@ -112,7 +116,7 @@ uv run --locked pytest
 uv build --no-sources
 ```
 
-CI runs on Linux and Windows with Python 3.12. Tests exercise actual subprocesses, descendant cleanup, bounded output, environment filtering, unchanged source contents, retention, protocol rejection, trace corruption, failed-run evidence, atomic artifact replacement, and replay without execution. A separate task-validation step checks the baseline, reference, repeated verdicts, weak implementations, and evaluator ownership. Symlink tests skip only when Windows denies link creation; Linux CI exercises them. Platform-specific tests skip on the other OS. Tests use no network APIs.
+CI runs on Linux and Windows with Python 3.12. Tests exercise actual subprocesses, descendant cleanup, bounded output, environment filtering, unchanged source contents, retention, protocol rejection, trace corruption, failed-run evidence, atomic artifact replacement, and replay without execution. Separate task-validation steps check each baseline, reference, repeated verdicts, weak implementations, and evaluator ownership. Routing checks also accept a different correct repair. Symlink tests skip only when Windows denies link creation; Linux CI exercises them. Platform-specific tests skip on the other OS. Tests use no network APIs.
 
 ## Design Decisions
 
@@ -127,7 +131,7 @@ CI runs on Linux and Windows with Python 3.12. Tests exercise actual subprocesse
 
 ## Limitations
 
-No VM/container isolation, hostile-code containment, network restriction, general write enforcement, scoring, or automatic task dependency installation exists. `run` is unavailable. `allowed_paths` is validated but is not an OS write policy. Source trees must remain stable during copying. Tools and verifiers retain host permissions and network access. One original task is available; broader task coverage and measured difficulty calibration remain future work.
+No VM/container isolation, hostile-code containment, network restriction, general write enforcement, scoring, or automatic task dependency installation exists. `run` is unavailable. `allowed_paths` is validated but is not an OS write policy. Source trees must remain stable during copying. Tools and verifiers retain host permissions and network access. Two original tasks are available; broader task coverage and measured difficulty calibration remain future work.
 
 Traces are structured execution evidence, not cryptographic audit logs. They are editable and cannot authenticate verifier behavior. Flushes improve failure visibility but cannot guarantee durability after power loss or unavailable storage. Replay validates structure and ordering, not a full workflow proof.
 

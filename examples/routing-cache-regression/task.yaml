@@ -1,0 +1,11 @@
+schema_version: '1.0'
+id: routing-cache-regression
+title: Stale route resolution after configuration changes
+description: Repair stale route resolution after runtime configuration changes in a hierarchical routing service.
+workspace: start
+timeout_seconds: 30
+verification_command: [python, -I, -m, routing_regression_evaluator]
+allowed_paths: [src, tests]
+metadata:
+  category: root-cause-debugging
+  implementation_language: python
