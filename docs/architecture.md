@@ -58,4 +58,4 @@ TaskResult adds an optional `retained_workspace` for failed runs. Process durati
 
 ## Deferred work
 
-Candidate operations and scoring remain absent. The [feature task](../examples/tenant-quota-service/README.md) and [routing regression](../examples/routing-cache-regression/README.md) use the existing framework without extending its runtime. Protocol validation does not authenticate verifier code. The [trust boundary](../SECURITY.md) and [trace semantics](tracing.md) are part of the contract.
+Candidate operations and scoring remain absent. The [feature task](../examples/tenant-quota-service/README.md), [routing regression](../examples/routing-cache-regression/README.md), and [metadata optimization](../examples/metadata-batch-optimization/README.md) use the existing framework without extending its runtime. The metadata task adds evaluator-owned operation counters and a separate measurement script; timing ratios do not gate correctness. Protocol validation does not authenticate verifier code. The [trust boundary](../SECURITY.md) and [trace semantics](tracing.md) are part of the contract.
